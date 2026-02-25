@@ -1,5 +1,5 @@
-;; StackSusu NFT v7
-;; Membership badges and achievements
+;; StackSusu NFT v7.1
+;; Membership badges and achievements with batch mint, burn, metadata update, and events
 
 (define-constant CONTRACT-OWNER tx-sender)
 
@@ -43,6 +43,20 @@
   bool
 )
 
+;; ============================================
+;; Events
+;; ============================================
+(define-public (emit-mint-event (owner principal) (token-id uint))
+  (print {event: "mint", owner: owner, token-id: token-id})
+)
+
+(define-public (emit-transfer-event (from principal) (to principal) (token-id uint))
+  (print {event: "transfer", from: from, to: to, token-id: token-id})
+)
+
+(define-public (emit-burn-event (owner principal) (token-id uint))
+  (print {event: "burn", owner: owner, token-id: token-id})
+)
 
 ;; ============================================
 ;; Mint Functions
@@ -73,7 +87,23 @@
     (map-set minted-badges { owner: member, nft-type: TYPE-MEMBER-BADGE } true)
     
     (var-set nft-counter token-id)
+    (emit-mint-event member token-id)
     (ok token-id)
+  )
+)
+
+;; Batch minting for multiple members
+(define-public (mint-member-badges-batch (members (list 10 principal)))
+  (begin
+    (fold
+      (lambda (member _)
+        (try! (mint-member-badge member))
+        u0
+      )
+      u0
+      members
+    )
+    (ok true)
   )
 )
 
@@ -96,6 +126,7 @@
       (unwrap! (as-max-len? (append (default-to (list) (map-get? owner-nfts member)) token-id) u50) ERR-NOT-AUTHORIZED))
     
     (var-set nft-counter token-id)
+    (emit-mint-event member token-id)
     (ok token-id)
   )
 )
@@ -123,10 +154,37 @@
       (unwrap! (as-max-len? (append (default-to (list) (map-get? owner-nfts member)) token-id) u50) ERR-NOT-AUTHORIZED))
     
     (var-set nft-counter token-id)
+    (emit-mint-event member token-id)
     (ok token-id)
   )
 )
 
+;; ============================================
+;; Metadata Update (Admin Only)
+;; ============================================
+(define-public (update-nft-metadata (token-id uint) (metadata (string-ascii 200)))
+  (let ((nft (unwrap! (map-get? nfts token-id) ERR-NOT-FOUND)))
+    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+    (map-set nfts token-id (merge nft { metadata: metadata }))
+    (ok true)
+  )
+)
+
+;; ============================================
+;; Burn NFT
+;; ============================================
+(define-public (burn-nft (token-id uint))
+  (let ((nft (unwrap! (map-get? nfts token-id) ERR-NOT-FOUND)))
+    (asserts! (is-eq tx-sender (get owner nft)) ERR-NOT-AUTHORIZED)
+    ;; Remove from owner-nfts
+    (map-set owner-nfts (get owner nft)
+      (unwrap! (as-max-len? (filter (lambda (id) (not (is-eq id token-id))) (default-to (list) (map-get? owner-nfts (get owner nft)))) u50) ERR-NOT-AUTHORIZED))
+    ;; Remove from nfts map
+    (map-delete nfts token-id)
+    (emit-burn-event (get owner nft) token-id)
+    (ok true)
+  )
+)
 
 ;; ============================================
 ;; Transfer
@@ -146,10 +204,10 @@
     (map-set owner-nfts recipient 
       (unwrap! (as-max-len? (append (default-to (list) (map-get? owner-nfts recipient)) token-id) u50) ERR-NOT-AUTHORIZED))
     
+    (emit-transfer-event tx-sender recipient token-id)
     (ok true)
   )
 )
-
 
 ;; ============================================
 ;; Read Functions

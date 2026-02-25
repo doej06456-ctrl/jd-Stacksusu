@@ -17,6 +17,10 @@ export interface SearchBarProps {
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
   className?: string;
+  maxLength?: number;
+  readOnly?: boolean;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
 export const SearchBar = memo(forwardRef<HTMLDivElement, SearchBarProps>(
@@ -34,6 +38,10 @@ export const SearchBar = memo(forwardRef<HTMLDivElement, SearchBarProps>(
       size = 'md',
       fullWidth = false,
       className,
+      maxLength,
+      readOnly = false,
+      onFocus,
+      onBlur,
     },
     ref
   ) {
@@ -52,20 +60,14 @@ export const SearchBar = memo(forwardRef<HTMLDivElement, SearchBarProps>(
     const handleChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
-
-        if (controlledValue === undefined) {
-          setInternalValue(newValue);
-        }
-
+        if (controlledValue === undefined) setInternalValue(newValue);
         onChange?.(newValue);
       },
       [controlledValue, onChange]
     );
 
     const handleClear = useCallback(() => {
-      if (controlledValue === undefined) {
-        setInternalValue('');
-      }
+      if (controlledValue === undefined) setInternalValue('');
       onChange?.('');
       onSearch?.('');
       inputRef.current?.focus();
@@ -73,11 +75,10 @@ export const SearchBar = memo(forwardRef<HTMLDivElement, SearchBarProps>(
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Escape') {
-          handleClear();
-        }
+        if (e.key === 'Escape') handleClear();
+        else if (e.key === 'Enter') onSearch?.(value);
       },
-      [handleClear]
+      [handleClear, onSearch, value]
     );
 
     const iconSize = size === 'sm' ? 14 : size === 'lg' ? 20 : 16;
@@ -109,10 +110,14 @@ export const SearchBar = memo(forwardRef<HTMLDivElement, SearchBarProps>(
           onKeyDown={handleKeyDown}
           autoFocus={autoFocus}
           disabled={disabled}
+          readOnly={readOnly}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          maxLength={maxLength}
           aria-label="Search"
         />
 
-        {showClear && value && (
+        {showClear && value && !readOnly && (
           <button
             type="button"
             className="search-bar__clear"
